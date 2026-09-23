@@ -1,0 +1,51 @@
+# Visual Studio / .NET Core
+## Build results
+bin/
+obj/
+publish/
+out/
+
+## Visual Studio specific
+.vs/
+*.csproj.user
+*.user
+*.suo
+*.cache
+*.pidb
+*.psess
+*.sln.ide
+*.slnx
+*.sln.docstates
+*.vsp
+*.vspx
+
+## Logs
+logs/
+**/logs/
+*.log
+
+## User Secrets
+secrets.json
+appsettings.*.local.json
+
+## NuGet
+packages/
+*.nupkg
+project.lock.json
+project.assets.json
+
+## Node / frontend (если есть)
+node_modules/
+npm-debug.log
+
+## OS generated
+Thumbs.db
+desktop.ini
+.DS_Store
+
+## Rider / JetBrains
+.idea/
+*.sln.iml
+
+## SonarCloud (опционально, если кэш)
+.sonarqube/

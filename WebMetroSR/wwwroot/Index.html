@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <script>
+        (async function checkAuth() {
+            try {
+                const res = await fetch('/api/auth/check');
+                const data = await res.json();
+                console.log('Auth check:', data);
+                if (!data.authenticated) {
+                    console.log('Not authenticated, redirect to login');
+                    window.location.href = '/login.html';
+                } else {
+                    console.log('Authenticated as', data.username);
+                    window.currentUser = data.username;
+                }
+            } catch (err) {
+                console.error('Auth check error:', err);
+                window.location.href = '/login.html';
+            }
+        })();
+    </script>
+
+    <aside class="sidebar">
+        <div class="search-box" id="search-container">
+            <label for="search" class="sr-only"></label>
+            <input type="text" class="search-input" placeholder="Hostname or IP" id="search" autocomplete="off">
+            <div class="search-loader"></div>
+        </div>
+        <div id="tree" class="tree-view"></div>
+    </aside>
+
+    <main class="main">
+        <header class="header">
+            <div class="header-info">
+                <div class="info-row"><span class="label">Object:</span> <span id="object-type" class="val-mono">—</span></div>
+                <div class="info-row">
+                    <span class="label">Current user:</span>
+                    <span id="current-user" class="val-mono">—</span>
+                    <button class="tag-btn" id="groupsBtn" disabled>Groups</button>
+                </div>
+                <div class="info-row"><span class="label">LastBoot:</span> <span id="last-boot" class="val-mono">—</span></div>
+            </div>
+            <div class="actions">
+                <button class="btn-act rdp-btn" id="rdpBtn" disabled>RDP</button>
+            </div>
+        </header>
+
+        <nav class="nav-tabs">
+            <div class="tab active" data-tab="info">Основная информация</div>
+            <div class="tab disabled" data-tab="logs">Дополнительная информация</div>
+            <div class="tab disabled" data-tab="funcs">Функции</div>
+        </nav>
+
+        <section class="content">
+            <div id="info" class="pane active">
+                <div class="data-section">
+                    <div class="data-grid">
+                        <div class="data-item"><span class="label">Hostname:</span><span class="val-mono" id="display-hostname">—</span></div>
+                        <div class="data-item"><span class="label">Модель ПК:</span><span class="val-mono" id="pc-model">—</span></div>
+                        <div class="data-item"><span class="label">IP Адрес:</span><span class="val-mono" id="ip-addr">—</span></div>
+                        <div class="data-item"><span class="label">S/N (BIOS):</span><span class="val-mono" id="pc-serial">—</span></div>
+                        <div class="data-item"><span class="label">MAC Адрес:</span><span class="val-mono" id="mac-addr">—</span></div>
+                        <div class="data-item"><span class="label">Информация об ОС:</span><span class="val-mono" id="os-info">—</span></div>
+                        <div class="data-item"><span class="label">Switch_Port:</span><span class="val-mono" id="switch-port">—</span></div>
+                        <div class="data-item"><span class="label">Тип подключения:</span><span class="val-mono" id="net-type">—</span></div>
+                        <div class="data-item"><span class="label">Версия BIOS:</span><span class="val-mono" id="bios-version">—</span></div>
+                    </div>
+                    <div class="storage-box">
+                        <div class="storage-row"><span class="label" style="min-width:80px;">Диск C:</span><span class="val-mono">Всего: <span id="hdd-total">—</span></span><span class="val-mono">Свободно: <span id="hdd-free" style="color:var(--success); font-weight:700;">—</span></span></div>
+                        <div class="storage-row"><span class="label" style="min-width:80px;">ОЗУ:</span><span class="val-mono" id="ram-info">—</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="logs" class="pane">
+                <div class="data-section" id="logsDataSection">
+                    <div class="disabled-pane-message">⚠️ Для доступа к логам выберите хост с корректным IP</div>
+                </div>
+            </div>
+
+            <div id="funcs" class="pane">
+                <div class="data-section">
+                    <div class="disabled-pane-message">⚠️ Для доступа к функциям выберите хост с корректным IP</div>
+                    <div class="grid-layout" style="display:none;">
+                        <button class="btn-act func-btn" data-func="software">Установленное ПО</button>
+                        <button class="btn-act func-btn" data-func="devices">Список устройств</button>
+                        <button class="btn-act func-btn" data-func="insight">Insight Card</button>
+                        <button class="btn-act func-btn" data-func="share">Open Share</button>
+                        <button class="btn-act func-btn" data-func="msi">Очистка MSI/MSP</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Модальные окна -->
+    <div id="groupsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Группы пользователя <span id="groupsUserName"></span></h2>
+                <button class="close-modal" id="closeGroupsModalBtn">&times;</button>
+            </div>
+            <div class="groups-list-container">
+                <div id="groupsLoading" style="text-align:center; padding:40px;">Загрузка групп...</div>
+                <ul id="groupsList" class="groups-list" style="display:none;"></ul>
+            </div>
+            <div class="groups-count" id="groupsCount"></div>
+        </div>
+    </div>
+
+    <div id="softwareModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Установленное ПО <span id="softwareHostname"></span></h2>
+                <button class="close-modal closeSoftwareModalBtn">&times;</button>
+            </div>
+            <label for="softwareSearchInput" class="sr-only">Поиск по установленному ПО</label>
+            <input type="text" id="softwareSearchInput" class="search-input-table" placeholder="🔍 Поиск по имени программы...">
+            <div class="table-container">
+                <table class="data-table" id="softwareTable">
+                    <thead><tr><th>Название программы</th><th>Версия</th></tr></thead>
+                    <tbody id="softwareTableBody"><tr><td colspan="2" style="text-align:center;">Загрузка...</td></tr></tbody>
+                </table>
+            </div>
+            <div class="groups-count" id="softwareCount"></div>
+        </div>
+    </div>
+
+    <div id="devicesModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Список устройств <span id="devicesHostname"></span></h2>
+                <button class="close-modal closeDevicesModalBtn">&times;</button>
+            </div>
+            <div class="table-container">
+                <table class="data-table" id="devicesTable">
+                    <thead><tr><th>Категория</th><th>Название устройства</th><th>Тип подключения</th></tr></thead>
+                    <tbody id="devicesTableBody"><tr><td colspan="3" style="text-align:center;">Загрузка...</td></tr></tbody>
+                </table>
+            </div>
+            <div class="groups-count" id="devicesCount"></div>
+        </div>
+    </div>
+
+    <!-- Подключение скриптов (ВАЖНЫЙ ПОРЯДОК!) -->
+    <script src="js/constants.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/store.js"></script>
+    <script src="js/theme.js"></script>
+    <script src="js/modals.js"></script>
+    <script src="js/logs.js"></script>
+    <script src="js/functions.js"></script>
+    <script src="js/tree.js"></script>
+    <script src="js/main.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,6 @@
+@WebMetroSR_HostAddress = http://localhost:5036
+
+GET {{WebMetroSR_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
