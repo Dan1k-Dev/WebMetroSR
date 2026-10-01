@@ -42,7 +42,7 @@ async function loadHosts(dn, container) {
             div.textContent = (h.Name || h.name).toUpperCase();
             div.onclick = (e) => {
                 e.stopPropagation();
-                if (typeof updateHostInfo === 'function') updateHostInfo(div.textContent, div);
+                if (typeof updateHostInfo === 'function') void updateHostInfo(div.textContent, div);
             };
             list.appendChild(div);
         });

@@ -141,7 +141,7 @@ window.cleanMsiMsp = cleanMsiMsp;
 function decodeUnicodeEscapes(str) {
     if (!str) return str;
     try {
-        return str.replace(/\\u([0-9A-Fa-f]{4})/g, (match, grp) => String.fromCharCode(parseInt(grp, 16)));
+        return str.replace(/\\u([0-9A-Fa-f]{4})/g, (match, grp) => String.fromCharCode(Number.parseInt(grp, 16)));
     } catch (e) {
         console.error('Decode error:', e);
         return str;
@@ -550,9 +550,9 @@ function showPrinterPanel() {
         </div>
     `;
     funcsSection.insertAdjacentHTML('beforeend', panelHtml);
-    loadPrinterDrivers();
+    void loadPrinterDrivers();
     document.getElementById('connectPrinterBtn').onclick = connectPrinter;
-    document.getElementById('listPrintersBtn').onclick = () => showPrintersList();
+    document.getElementById('listPrintersBtn').onclick = () => { void showPrintersList(); };
 }
 
 // ---------- Обработчик функциональных кнопок ----------
@@ -566,10 +566,10 @@ function handleFuncButton(funcType) {
 
     switch (funcType) {
         case 'software':
-            loadInstalledSoftware();
+            void loadInstalledSoftware();
             break;
         case 'devices':
-            loadDevices();
+            void loadDevices();
             break;
         case 'rdp':                 
             openRdp();              
@@ -578,7 +578,7 @@ function handleFuncButton(funcType) {
             openShare();
             break;
         case 'msi':
-            cleanMsiMsp();
+            void cleanMsiMsp();
             break;
         case 'printer':
             showPrinterPanel();

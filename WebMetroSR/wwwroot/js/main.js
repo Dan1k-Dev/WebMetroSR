@@ -347,7 +347,7 @@ async function updateHostInfo(name, el, forceRefresh = false, prefill = null) {
         }
 
         // Хост онлайн — запускаем WMI
-        startWmiRequests(name, ip, signal, { serial: !!(prefill && prefill.serial) });
+        void startWmiRequests(name, ip, signal, { serial: !!(prefill && prefill.serial) });
     } else {
         // IP не получен — сразу оффлайн
         handleHostOffline(name, el);
@@ -392,8 +392,8 @@ function buildLogsPane() {
     if (routeBtn) routeBtn.onclick = loadRoute;
     if (tracerouteBtn) tracerouteBtn.onclick = loadTraceroute;
     if (ipconfigBtn) ipconfigBtn.onclick = loadIpConfig;
-    if (softwareBtn) softwareBtn.onclick = () => loadInstalledSoftware();
-    if (devicesBtn) devicesBtn.onclick = () => loadDevices();
+    if (softwareBtn) softwareBtn.onclick = () => { void loadInstalledSoftware(); };
+    if (devicesBtn) devicesBtn.onclick = () => { void loadDevices(); };
     if (insightBtn) insightBtn.onclick = openInsightCard;   // <-- NEW
 }
 
@@ -498,7 +498,9 @@ function isValidIPv4(ip) {
 
 // ---- Вспомогательные функции для поиска ----
 function validateSearchInput(val) {
-    if (val.includes('.') && !val.includes('-') && !isNaN(val.split('.')[0]) && !isValidIPv4(val)) {
+    if (val.includes('.') && !val.includes('-')
+        && !Number.isNaN(Number(val.split('.')[0]))
+        && !isValidIPv4(val)) {
         alert('Некорректный формат IPv4 адреса');
         return false;
     }
@@ -532,7 +534,7 @@ async function navigateToHostInTree(hostName, containerDn, prefill = null) {
         highlightTimeouts.delete(item);
     }
     item.classList.remove('found-highlight');
-    if (typeof updateHostInfo === 'function') updateHostInfo(hostName, item, false, prefill);
+    if (typeof updateHostInfo === 'function') void updateHostInfo(hostName, item, false, prefill);
     item.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return true;
 }

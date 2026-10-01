@@ -56,7 +56,7 @@ async function fetchUserGroups() {
 
 function openGroupsModal() {
     const groupsBtn = document.getElementById('groupsBtn');
-    if (groupsBtn && !groupsBtn.disabled) fetchUserGroups();
+    if (groupsBtn && !groupsBtn.disabled) void fetchUserGroups();
 }
 function closeGroupsModal() {
     const modal = document.getElementById('groupsModal');
