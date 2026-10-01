@@ -70,17 +70,17 @@ function createContainerElement(c, index) {
     nameSpan.textContent = containerName;
     contentWrapper.appendChild(nameSpan);
 
-    if (index !== 0) {
-        const menuBtn = document.createElement('button');
-        menuBtn.textContent = '⋮';
-        menuBtn.className = 'container-menu-btn';
-        menuBtn.onclick = (e) => {
-            e.stopPropagation();
-            const rect = menuBtn.getBoundingClientRect();
-            if (typeof showContextMenu === 'function') showContextMenu(rect.left, rect.bottom + 5, containerName);
-        };
-        contentWrapper.appendChild(menuBtn);
-    }
+    // if (index !== 0) {
+    //     const menuBtn = document.createElement('button');
+    //     menuBtn.textContent = '⋮';
+    //     menuBtn.className = 'container-menu-btn';
+    //     menuBtn.onclick = (e) => {
+    //         e.stopPropagation();
+    //         const rect = menuBtn.getBoundingClientRect();
+    //         if (typeof showContextMenu === 'function') showContextMenu(rect.left, rect.bottom + 5, containerName);
+    //     };
+    //     contentWrapper.appendChild(menuBtn);
+    // }
 
     summary.appendChild(contentWrapper);
     det.appendChild(summary);
@@ -119,56 +119,56 @@ async function buildTree() {
     }
 }
 
-function closeAllMenus() {
-    document.querySelectorAll('.context-menu').forEach(m => m.remove());
-}
+// function closeAllMenus() {
+//     document.querySelectorAll('.context-menu').forEach(m => m.remove());
+// }
 
-function showContextMenu(x, y, containerName) {
-    console.log('showContextMenu called for container:', containerName);
-    closeAllMenus();
-    const menu = document.createElement('div');
-    menu.className = 'context-menu';
-    menu.style.left = x + 'px';
-    menu.style.top = y + 'px';
+// function showContextMenu(x, y, containerName) {
+//     console.log('showContextMenu called for container:', containerName);
+//     closeAllMenus();
+//     const menu = document.createElement('div');
+//     menu.className = 'context-menu';
+//     menu.style.left = x + 'px';
+//     menu.style.top = y + 'px';
 
-    const infoBtn = document.createElement('button');
-    infoBtn.textContent = `📊 Информация о контейнере "${containerName}"`;
-    infoBtn.onclick = async () => {
-        console.log('Menu item clicked for container:', containerName);
-        closeAllMenus();
-        await showContainerInfo(containerName);
-    };
-    menu.appendChild(infoBtn);
-    document.body.appendChild(menu);
+//     const infoBtn = document.createElement('button');
+//     infoBtn.textContent = `📊 Информация о контейнере "${containerName}"`;
+//     infoBtn.onclick = async () => {
+//         console.log('Menu item clicked for container:', containerName);
+//         closeAllMenus();
+//         await showContainerInfo(containerName);
+//     };
+//     menu.appendChild(infoBtn);
+//     document.body.appendChild(menu);
 
-    setTimeout(() => {
-        const onClickOutside = (e) => {
-            if (!menu.contains(e.target)) {
-                closeAllMenus();
-                document.removeEventListener('click', onClickOutside);
-            }
-        };
-        document.addEventListener('click', onClickOutside);
-    }, 0);
-}
+//     setTimeout(() => {
+//         const onClickOutside = (e) => {
+//             if (!menu.contains(e.target)) {
+//                 closeAllMenus();
+//                 document.removeEventListener('click', onClickOutside);
+//             }
+//         };
+//         document.addEventListener('click', onClickOutside);
+//     }, 0);
+// }
 
-async function showContainerInfo(containerName) {
-    console.log('showContainerInfo called for:', containerName);
-    const details = Array.from(document.querySelectorAll('details')).find(d => {
-        const nameSpan = d.querySelector('.container-name');
-        return nameSpan && nameSpan.textContent === containerName;
-    });
-    if (!details || !details.dataset.dn) {
-        alert('Не удалось найти DN контейнера');
-        return;
-    }
-    const containerDn = details.dataset.dn;
-    // Используем dataset вместо getAttribute
-    const isDarkTheme = document.documentElement.dataset.theme === 'dark';
-    const theme = isDarkTheme ? 'dark' : 'light';
-    const url = `/container-info.html?name=${encodeURIComponent(containerName)}&dn=${encodeURIComponent(containerDn)}&theme=${theme}`;
-    window.open(url, '_blank');
-}
+// async function showContainerInfo(containerName) {
+//     console.log('showContainerInfo called for:', containerName);
+//     const details = Array.from(document.querySelectorAll('details')).find(d => {
+//         const nameSpan = d.querySelector('.container-name');
+//         return nameSpan && nameSpan.textContent === containerName;
+//     });
+//     if (!details || !details.dataset.dn) {
+//         alert('Не удалось найти DN контейнера');
+//         return;
+//     }
+//     const containerDn = details.dataset.dn;
+//     // Используем dataset вместо getAttribute
+//     const isDarkTheme = document.documentElement.dataset.theme === 'dark';
+//     const theme = isDarkTheme ? 'dark' : 'light';
+//     const url = `/container-info.html?name=${encodeURIComponent(containerName)}&dn=${encodeURIComponent(containerDn)}&theme=${theme}`;
+//     window.open(url, '_blank');
+// }
 
 function escapeHtml(str) {
     if (!str) return '';

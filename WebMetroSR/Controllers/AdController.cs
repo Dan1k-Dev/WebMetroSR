@@ -18,6 +18,7 @@ namespace WebMetroSR.Controllers
             IWmiService wmiService,
             IMetroScopeService metroScopeService,
             IAdService adService,
+            IPrintersService printersService,
             ISccmService sccmService,
             IFileService fileService,
             ICacheService cacheService,
@@ -28,6 +29,7 @@ namespace WebMetroSR.Controllers
         private readonly IWmiService _wmi = wmiService;
         private readonly IMetroScopeService _metro = metroScopeService;
         private readonly IAdService _ad = adService;
+        private readonly IPrintersService _printers = printersService;
         private readonly ISccmService _sccm = sccmService;
         private readonly IFileService _file = fileService;
         private readonly ICacheService _cache = cacheService;
@@ -261,6 +263,130 @@ namespace WebMetroSR.Controllers
 
             var groups = await _ad.GetUserGroupsAsync(userName);
             return Ok(groups ?? []);
+        }
+
+        [HttpGet("get-printer-drivers")]
+        public async Task<IActionResult> GetPrinterDrivers([FromQuery] string targetHost)
+        {
+            var auth = EnsureAuthenticated(_userCreds);
+            if (auth != null) return auth;
+
+            var validation = EnsureRequired((targetHost, nameof(targetHost)));
+            if (validation != null) return validation;
+
+            var drivers = await _printers.GetPrinterDriversAsync(targetHost);
+            return Ok(drivers);
+        }
+
+        [HttpGet("get-printers")]
+        public async Task<IActionResult> GetPrinters([FromQuery] string targetHost)
+        {
+            var auth = EnsureAuthenticated(_userCreds);
+            if (auth != null) return auth;
+
+            var validation = EnsureRequired((targetHost, nameof(targetHost)));
+            if (validation != null) return validation;
+
+            try
+            {
+                var printers = await _printers.GetPrintersAsync(targetHost);
+                return Ok(printers);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting printers for {TargetHost}", targetHost);
+                return Ok(new List<PrinterInfo>());
+            }
+        }
+
+        [HttpPost("connect-printer")]
+        public async Task<IActionResult> ConnectPrinter(
+            [FromForm] string targetHost,
+            [FromForm] string ipPrint,
+            [FromForm] string driverFullName,
+            [FromForm] string printName)
+        {
+            var auth = EnsureAuthenticated(_userCreds);
+            if (auth != null) return auth;
+
+            var validation = EnsureRequired(
+                (targetHost, nameof(targetHost)),
+                (ipPrint, nameof(ipPrint)),
+                (driverFullName, nameof(driverFullName)),
+                (printName, nameof(printName)));
+            if (validation != null) return validation;
+
+            try
+            {
+                var (success, output) = await _printers.ConnectPrinterAsync(targetHost, ipPrint, driverFullName, printName);
+
+                var clientIP = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                string user;
+                try { user = _userCreds.GetUsername() ?? "anonymous"; } catch { user = "anonymous"; }
+                var requestName = "ConnectPrinter";
+                var resultMessage = success ? "Success" : $"Error: {output}";
+
+                _logger.LogInformation("ConnectPrinter result for {TargetHost}: {Output}", targetHost, output);
+
+                using (LogContext.PushProperty("Category", "Change"))
+                using (LogContext.PushProperty("ClientIP", clientIP))
+                using (LogContext.PushProperty("User", user))
+                using (LogContext.PushProperty("RequestName", requestName))
+                using (LogContext.PushProperty("ResultMessage", resultMessage))
+                {
+                    _logger.LogInformation("Change action executed");
+                }
+
+                return Ok(new { success, output });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "ConnectPrinter exception");
+                return Ok(new { success = false, message = $"Ошибка: {ex.Message}" });
+            }
+        }
+
+        [HttpGet("check-printer-ip")]
+        public async Task<IActionResult> CheckPrinterIp([FromQuery] string ip)
+        {
+            var auth = EnsureAuthenticated(_userCreds);
+            if (auth != null) return auth;
+
+            var validation = EnsureRequired((ip, nameof(ip)));
+            if (validation != null) return validation;
+
+            try
+            {
+                bool isPrinter = await _printers.IsPrinterByIpAsync(ip);
+                return Ok(new { success = true, isPrinter });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "CheckPrinterIp failed for {Ip}", ip);
+                return Ok(new { success = false, isPrinter = false, error = ex.Message });
+            }
+        }
+
+        // Ниже добавляем ещё один эндпоинт для задачи 3 (проверка онлайна хоста)
+        [HttpGet("check-host-online")]
+        public async Task<IActionResult> CheckHostOnline([FromQuery] string ip)
+        {
+            var auth = EnsureAuthenticated(_userCreds);
+            if (auth != null) return auth;
+
+            var validation = EnsureRequired((ip, nameof(ip)));
+            if (validation != null) return validation;
+
+            try
+            {
+                bool online = await _ad.IsHostOnlineAsync(ip, 445, 3000);
+                return Ok(new { success = true, online });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "CheckHostOnline failed for {Ip}", ip);
+                return Ok(new { success = false, online = false, error = ex.Message });
+            }
         }
 
         [HttpGet("remote-devices")]
@@ -547,6 +673,26 @@ namespace WebMetroSR.Controllers
             var hostnames = new List<string>(hosts.Select(h => h.Name).OfType<string>());
             var infos = await _wmi.GetMultipleHostsInfoAsync(hostnames, cancellationToken: cancellationToken);
             return Ok(infos);
+        }
+
+        [HttpGet("find-host-by-serial")]
+        public async Task<IActionResult> FindHostBySerial(string serial)
+        {
+            var auth = EnsureAuthenticated(_userCreds);
+            if (auth != null) return auth;
+
+            var validation = EnsureRequired((serial, nameof(serial)));
+            if (validation != null) return validation;
+
+            var hostname = await _ad.GetHostnameBySerialAsync(serial);
+            return Ok(new
+            {
+                success = !string.IsNullOrEmpty(hostname),
+                hostName = hostname,
+                errorMessage = hostname == null
+                    ? $"Устройство с серийным номером {serial} не найдено в SCCM"
+                    : null
+            });
         }
     }
 }

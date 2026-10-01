@@ -231,5 +231,69 @@ namespace WebMetroSR.Services
         {
             return await _ps.ExecuteLapsCommandAsync(hostname, forceRefresh);
         }
+
+        /// <summary>
+        /// Получает hostname по серийному номеру BIOS через SCCM.
+        /// Возвращает null, если устройство не найдено.
+        /// </summary>
+        public async Task<string?> GetHostnameBySerialAsync(string serialNumber)
+        {
+            if (string.IsNullOrWhiteSpace(serialNumber))
+                return null;
+
+            string cacheKey = $"serial_{serialNumber.Trim().ToUpper()}";
+            if (_cache.TryGet<string>(cacheKey, out var cached) && !string.IsNullOrEmpty(cached))
+                return cached;
+
+            string escapedSerial = serialNumber.Trim().Replace("'", "''");
+
+            string script = $@"
+                            $SerialNumber = '{escapedSerial}'
+                            $SiteServer   = 'mow11sccmps402.rumadm.net'
+
+                            try {{
+                                $siteCode = (Get-WmiObject -ComputerName $SiteServer -Namespace 'root/sms' -Class 'SMS_ProviderLocation').SiteCode
+                                $namespace = ""root\sms\site_$siteCode""
+
+                                $bios = Get-WmiObject -ComputerName $SiteServer -Namespace $namespace -Query ""SELECT ResourceID FROM SMS_G_System_PC_BIOS WHERE SerialNumber = '$SerialNumber'""
+
+                                if (-not $bios) {{
+                                    return
+                                }}
+
+                                foreach ($b in $bios) {{
+                                    $sys = Get-WmiObject -ComputerName $SiteServer -Namespace $namespace -Class 'SMS_R_System' -Filter ""ResourceId = $($b.ResourceID)""
+                                    if ($sys) {{ $sys.Name }}
+                                }}
+                            }}
+                            catch {{
+                                Write-Error $_.Exception.Message
+                            }}";
+            script = _ps.InjectUserVariable(script);
+
+            try
+            {
+                string output = (await _ps.RunScriptAsync(script, timeoutSeconds: 60)).Trim();
+                if (string.IsNullOrWhiteSpace(output))
+                    return null;
+
+                // На всякий случай берём первую непустую строку (если вдруг несколько устройств с этим S/N)
+                string? hostname = output
+                    .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => s.Trim())
+                    .FirstOrDefault(s => !string.IsNullOrEmpty(s) && !s.StartsWith("Ошибка", StringComparison.OrdinalIgnoreCase));
+
+                if (string.IsNullOrWhiteSpace(hostname))
+                    return null;
+
+                _cache.Set(cacheKey, hostname, TimeSpan.FromMinutes(30));
+                return hostname;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "GetHostnameBySerialAsync failed for {Serial}", serialNumber);
+                return null;
+            }
+        }
     }
 }

@@ -66,6 +66,7 @@ namespace WebMetroSR
                 builder.Services.AddScoped<IAdService, AdService>();
                 builder.Services.AddScoped<ISccmService, SccmService>();
                 builder.Services.AddScoped<IFileService, FileService>();
+                builder.Services.AddScoped<IPrintersService, PrintersService>();
 
                 builder.Services.AddMemoryCache();
                 builder.Services.AddSingleton<ICacheService, MemoryCacheService>();

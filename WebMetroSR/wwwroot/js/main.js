@@ -70,6 +70,34 @@ function handleActiveCheckFailed(name, el) {
     updateButtonsAndTabsState();
 }
 
+function handleHostOffline(name, el) {
+    // Уведомление
+    alert(`Хост ${name} оффлайн. Информация недоступна.`);
+
+    document.querySelectorAll('.host-item').forEach(i => i.classList.remove('active-host', 'found-highlight'));
+    if (el) el.classList.add('active-host');
+    dom.hostname.textContent = name;
+    dom.hostname.classList.remove('loading-text');
+
+    resetFields.forEach(field => {
+        if (dom[field]) {
+            dom[field].textContent = 'Оффлайн';
+            dom[field].classList.remove('loading-text');
+        }
+    });
+    dom.objectType.textContent = 'Оффлайн';
+    dom.objectType.classList.remove('loading-text');
+
+    store.setState({
+        currentHostname: name,
+        currentIp: null,
+        currentUser: null,
+        isValidIp: false,
+        isSystemInfoLoaded: false
+    });
+    updateButtonsAndTabsState();
+}
+
 function processBasicInfo(data, name) {
     const ip = data.ip || "—";
     dom.ip.textContent = ip;
@@ -85,13 +113,12 @@ function processBasicInfo(data, name) {
 }
 
 // ---- Запуск WMI-запросов с обновлением по мере поступления ----
-function startWmiRequests(name, ip, signal) {
+function startWmiRequests(name, ip, signal, skip = {}) {
     const requestEntries = [
         { key: 'user', promise: fetchCurrentUser(name, ip, signal) },
         { key: 'port', promise: fetchSwitchPort(ip, signal) },
         { key: 'mac', promise: fetchMac(name, ip, signal) },
         { key: 'model', promise: fetchModel(name, ip, signal) },
-        { key: 'serial', promise: fetchSerial(name, ip, signal) },
         { key: 'biosVersion', promise: fetchBiosVersion(name, ip, signal) },
         { key: 'os', promise: fetchOs(name, ip, signal) },
         { key: 'lastboot', promise: fetchLastBoot(name, ip, signal) },
@@ -99,6 +126,11 @@ function startWmiRequests(name, ip, signal) {
         { key: 'ram', promise: fetchRam(name, ip, signal) },
         { key: 'netType', promise: fetchNetType(name, ip, signal) }
     ];
+
+    // S/N запрашиваем только если он не был предзаполнен из поиска
+    if (!skip.serial) {
+        requestEntries.push({ key: 'serial', promise: fetchSerial(name, ip, signal) });
+    }
 
     const promises = requestEntries.map(({ key, promise }) => {
         return promise
@@ -205,19 +237,19 @@ function startWmiRequests(name, ip, signal) {
             });
     });
 
-    // Когда все WMI-запросы завершены — закрываем batch
+// Когда все WMI-запросы завершены — закрываем batch
     return Promise.allSettled(promises).finally(() => endBatchSafe());
 }
 
 // ---- Основная функция обновления информации о хосте ----
-async function updateHostInfo(name, el, forceRefresh = false) {
+async function updateHostInfo(name, el, forceRefresh = false, prefill = null) {
     if (isLoading) {
         console.log('updateHostInfo already in progress, skipping');
         return;
     }
     isLoading = true;
 
-    console.log('updateHostInfo called for:', name, forceRefresh ? '(force refresh)' : '');
+    console.log('updateHostInfo called for:', name, forceRefresh ? '(force refresh)' : '', prefill || '');
 
     if (el && highlightTimeouts.has(el)) {
         clearTimeout(highlightTimeouts.get(el));
@@ -229,11 +261,16 @@ async function updateHostInfo(name, el, forceRefresh = false) {
     currentAbortController = new AbortController();
     const signal = currentAbortController.signal;
 
-    // ⚠️ ОБЯЗАТЕЛЬНО: открываем batch перед первым запросом
     if (typeof startBatch === 'function') startBatch(name);
 
     resetHostInfoFields(name, el);
 
+    if (prefill && prefill.serial) {
+        dom.pcSerial.textContent = prefill.serial;
+        dom.pcSerial.classList.remove('loading-text');
+    }
+
+    // -------- SCCM active check --------
     let notification = null;
     try {
         notification = document.createElement('div');
@@ -246,6 +283,7 @@ async function updateHostInfo(name, el, forceRefresh = false) {
             handleActiveCheckFailed(name, el);
             if (notification) notification.remove();
             endBatchSafe();
+            isLoading = false;   // ← СБРОС
             return;
         }
     } catch (err) {
@@ -254,36 +292,68 @@ async function updateHostInfo(name, el, forceRefresh = false) {
         if (notification) notification.remove();
     }
 
+    // -------- Get IP --------
+    let ip = null;
     try {
-        const basicData = await fetchBasicInfo(name, signal, forceRefresh);
-        if (basicData.success) {
-            const ip = processBasicInfo(basicData, name);
-            if (ip && ip !== '—' && ip !== 'Offline') {
-                // startWmiRequests сам закроет batch по завершении всех запросов
-                startWmiRequests(name, ip, signal);
-            } else {
-                dom.switchPort.textContent = "Offline";
-                dom.user.textContent = "N/A";
-                store.setState({ currentUser: "N/A" });
-                resetFields.forEach(field => {
-                    if (field !== 'ip' && dom[field]) {
-                        dom[field].textContent = '—';
-                        dom[field].classList.remove('loading-text');
-                    }
-                });
-                store.setState({ isSystemInfoLoaded: true });
-                updateButtonsAndTabsState();
-                endBatchSafe();
-                return;
+        if (prefill && prefill.ip) {
+            ip = prefill.ip;
+            dom.ip.textContent = ip;
+            dom.ip.classList.remove('loading-text');
+            dom.objectType.textContent = name.includes("LAP") ? "Ноутбук" : "Толстый клиент";
+            dom.objectType.classList.remove('loading-text');
+            store.setState({
+                currentHostname: name,
+                currentIp: ip,
+                isValidIp: (ip && ip !== '—' && ip !== 'Offline')
+            });
+        } else {
+            const basicData = await fetchBasicInfo(name, signal, forceRefresh);
+            if (basicData.success) {
+                ip = processBasicInfo(basicData, name);
             }
         }
     } catch (err) {
         if (err.name === 'AbortError') {
             endBatchSafe();
+            isLoading = false;   // ← СБРОС
             return;
         }
         console.error(err);
         endBatchSafe();
+        isLoading = false;   // ← СБРОС
+        return;
+    }
+
+    // -------- Online check + WMI --------
+    const ipIsValid = ip && ip !== '—' && ip !== 'Offline' && ip !== '0.0.0.0';
+
+    if (ipIsValid) {
+        //  ПРОВЕРКА ОНЛАЙНА через порт 445
+        try {
+            const onlineCheck = await checkHostOnline(ip, signal);
+            if (!onlineCheck.online) {
+                handleHostOffline(name, el);
+                endBatchSafe();
+                isLoading = false;   // ← СБРОС
+                return;
+            }
+        } catch (err) {
+            // Если проверка упала — считаем оффлайн
+            console.error('Online check failed:', err);
+            handleHostOffline(name, el);
+            endBatchSafe();
+            isLoading = false;
+            return;
+        }
+
+        // Хост онлайн — запускаем WMI
+        startWmiRequests(name, ip, signal, { serial: !!(prefill && prefill.serial) });
+    } else {
+        // IP не получен — сразу оффлайн
+        handleHostOffline(name, el);
+        endBatchSafe();
+        isLoading = false;   // ← СБРОС
+        return;
     }
 
     store.setState({ isSystemInfoLoaded: true });
@@ -304,16 +374,27 @@ function buildLogsPane() {
             <button class="btn-act" id="routeBtn">Маршруты (route)</button>
             <button class="btn-act" id="tracerouteBtn">Трассировка (traceroute)</button>
             <button class="btn-act" id="ipconfigBtn">ipconfig</button>
+            <button class="btn-act" id="softwareBtn">Установленное ПО</button>
+            <button class="btn-act" id="devicesBtn">Список устройств</button>
+            <button class="btn-act" id="insightBtn">Insight Card</button>
         </div>
     `;
+
     const kixtartBtn = document.getElementById('kixtartLogBtn');
     const routeBtn = document.getElementById('routeBtn');
     const tracerouteBtn = document.getElementById('tracerouteBtn');
     const ipconfigBtn = document.getElementById('ipconfigBtn');
+    const softwareBtn = document.getElementById('softwareBtn');
+    const devicesBtn = document.getElementById('devicesBtn');
+    const insightBtn = document.getElementById('insightBtn');
+
     if (kixtartBtn) kixtartBtn.onclick = loadKixtartLog;
     if (routeBtn) routeBtn.onclick = loadRoute;
     if (tracerouteBtn) tracerouteBtn.onclick = loadTraceroute;
     if (ipconfigBtn) ipconfigBtn.onclick = loadIpConfig;
+    if (softwareBtn) softwareBtn.onclick = () => loadInstalledSoftware();
+    if (devicesBtn) devicesBtn.onclick = () => loadDevices();
+    if (insightBtn) insightBtn.onclick = openInsightCard;   // <-- NEW
 }
 
 function buildFuncsPane() {
@@ -321,18 +402,20 @@ function buildFuncsPane() {
     if (!funcsSection) return;
     funcsSection.innerHTML = `
         <div class="grid-layout">
-            <button class="btn-act func-btn" data-func="software">Установленное ПО</button>
-            <button class="btn-act func-btn" data-func="devices">Список устройств</button>
-            <button class="btn-act func-btn" data-func="insight">Insight Card</button>
+            <button class="btn-act func-btn" id="rdpBtn" data-func="rdp" disabled>RDP</button>
             <button class="btn-act func-btn" data-func="share">Open Share</button>
             <button class="btn-act func-btn" data-func="msi">Очистка MSI/MSP</button>
+            <button class="btn-act func-btn" data-func="printer">Принтеры на ПК</button>
         </div>
     `;
+
     document.querySelectorAll('.func-btn').forEach(btn => {
-        if (!btn.disabled) {
-            btn.onclick = () => handleFuncButton(btn.dataset.func);
-        }
+        btn.onclick = () => handleFuncButton(btn.dataset.func);
     });
+
+    const rdpBtn = document.getElementById('rdpBtn');
+    if (rdpBtn) rdpBtn.disabled = !store.getState().isValidIp;
+
     const oldPanel = document.getElementById('printerPanel');
     if (oldPanel) oldPanel.remove();
 }
@@ -430,46 +513,83 @@ function findHostInContainer(container, hostName) {
     return Array.from(container.querySelectorAll('.host-item')).find(h => h.textContent === hostName);
 }
 
+async function navigateToHostInTree(hostName, containerDn, prefill = null) {
+    if (typeof containerDn !== 'string') {
+        console.error('Invalid containerDn type:', containerDn);
+        return false;
+    }
+    document.querySelectorAll('details').forEach(d => d.open = false);
+    const det = getContainerByDn(containerDn);
+    if (!det) return false;
+    det.open = true;
+    if (det.dataset.loaded !== "true") await loadHosts(containerDn, det);
+    document.querySelectorAll('.host-item').forEach(i => i.classList.remove('found-highlight'));
+    const item = findHostInContainer(det, hostName);
+    if (!item) return false;
+
+    if (highlightTimeouts.has(item)) {
+        clearTimeout(highlightTimeouts.get(item));
+        highlightTimeouts.delete(item);
+    }
+    item.classList.remove('found-highlight');
+    if (typeof updateHostInfo === 'function') updateHostInfo(hostName, item, false, prefill);
+    item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return true;
+}
+
 async function performSearch(val, searchInput, searchContainer) {
     searchInput.disabled = true;
     if (searchContainer) searchContainer.classList.add('searching');
     try {
+        const isIp = isValidIPv4(val);
+
+        // 1) Обычный поиск (hostname или IP)
         const result = await findHost(val);
         if (result.success) {
-            const targetDn = result.containerDn || result.containerDN;
             const hostName = (result.hostName || val).toUpperCase();
-            if (typeof targetDn !== 'string') {
-                console.error('Invalid containerDn type:', targetDn);
-                alert(`Не удалось определить контейнер для хоста ${hostName}`);
-                return;
-            }
-            document.querySelectorAll('details').forEach(d => d.open = false);
-            const det = getContainerByDn(targetDn);
-            if (!det) {
-                alert(`Контейнер не найден для хоста ${hostName}`);
-                return;
-            }
-            det.open = true;
-            if (det.dataset.loaded !== "true") await loadHosts(targetDn, det);
-            document.querySelectorAll('.host-item').forEach(i => i.classList.remove('found-highlight'));
-            const item = findHostInContainer(det, hostName);
-            if (item) {
-                if (highlightTimeouts.has(item)) {
-                    clearTimeout(highlightTimeouts.get(item));
-                    highlightTimeouts.delete(item);
+            const targetDn = result.containerDn || result.containerDN;
+
+            // Если искали по IP — сразу подставим его, чтобы не делать повторный запрос
+            const prefill = isIp ? { ip: val } : null;
+
+            const ok = await navigateToHostInTree(hostName, targetDn, prefill);
+            if (!ok) alert(`Контейнер или хост ${hostName} не найдены в дереве`);
+            return;
+        }
+
+        // 2) Если это не IP — пробуем как серийный номер через SCCM
+        if (!isIp) {
+            try {
+                const serialResult = await findHostBySerial(val);
+                if (serialResult.success && serialResult.hostName) {
+                    const hostName = serialResult.hostName.toUpperCase();
+
+                    // Найденный hostname ищем как обычно
+                    const hostResult = await findHost(hostName);
+                    if (hostResult.success) {
+                        const targetDn = hostResult.containerDn || hostResult.containerDN;
+
+                        // Серийник предзаполняем — не будем запрашивать S/N через WMI
+                        const prefill = { serial: val.trim() };
+
+                        const ok = await navigateToHostInTree(hostName, targetDn, prefill);
+                        if (ok) return;
+                        alert(`Хост ${hostName} (найден по S/N ${val}) не отображается в дереве`);
+                        return;
+                    }
+                    alert(`По серийному номеру ${val} найден хост ${hostName}, но он отсутствует в AD`);
+                    return;
                 }
-                item.classList.remove('found-highlight');
-                if (typeof updateHostInfo === 'function') updateHostInfo(hostName, item);
-                item.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            } else {
-                alert(`Хост ${hostName} не найден в списке`);
+            } catch (serialErr) {
+                console.error('Serial search error:', serialErr);
             }
+        }
+
+        // 3) Ничего не найдено
+        if (isIp) {
+            alert(`Не удалось найти хост по IP-адресу ${val}. Возможно, отсутствует обратная DNS-запись или компьютер не в AD.`);
         } else {
-            if (isValidIPv4(val)) {
-                alert(`Не удалось найти хост по IP-адресу ${val}. Возможно, отсутствует обратная DNS-запись или компьютер не в AD.`);
-            } else {
-                alert(`Хост ${val} не найден в AD`);
-            }
+            alert(`Хост "${val}" не найден в AD, устройство с таким серийным номером также не найдено в SCCM.`);
         }
     } catch (err) {
         console.error('Search error:', err);
@@ -498,11 +618,9 @@ function init() {
     buildTree();
 
     const groupsBtnElem = document.getElementById('groupsBtn');
-    const rdpBtn = document.getElementById('rdpBtn');
     const closeGroupsBtn = document.getElementById('closeGroupsModalBtn');
 
     if (groupsBtnElem) groupsBtnElem.onclick = openGroupsModal;
-    if (rdpBtn) rdpBtn.onclick = openRdp;
     if (closeGroupsBtn) closeGroupsBtn.onclick = closeGroupsModal;
 
     document.querySelectorAll('.closeSoftwareModalBtn').forEach(btn => btn.onclick = closeSoftwareModal);

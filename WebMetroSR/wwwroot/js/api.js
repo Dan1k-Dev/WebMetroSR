@@ -77,35 +77,58 @@ const endpoints = {
     remoteDevices: { path: '/remote-devices', method: 'GET' },
     biosVersion: { path: '/get-bios-version', method: 'GET' },
     findHost: { path: '/find-host', method: 'GET' },
+    findHostBySerial: { path: '/find-host-by-serial', method: 'GET' },
     clientActive: { path: '/check-client-active', method: 'GET' },
     route: { path: '/route', method: 'GET' },
     traceroute: { path: '/traceroute', method: 'GET' },
     ipconfig: { path: '/ipconfig', method: 'GET' },
     kixtartLog: { path: '/read-kixtart-log', method: 'GET' },
-    cleanMsi: { path: '/clean-msi-msp', method: 'POST' }
+    cleanMsi: { path: '/clean-msi-msp', method: 'POST' },
+    printerDrivers: { path: '/get-printer-drivers', method: 'GET' },
+    printers: { path: '/get-printers', method: 'GET' },
+    connectPrinter: { path: '/connect-printer', method: 'POST' },
+    checkPrinterIp: { path: '/check-printer-ip', method: 'GET' },
+    checkHostOnline: { path: '/check-host-online', method: 'GET' },
 };
 
 async function request(endpoint, params = {}, options = {}) {
     const { path, method } = endpoints[endpoint];
-    const url = new URL(`${API_BASE}${path}`, window.location.origin);
-    Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-            url.searchParams.append(key, String(value));
-        }
-    });
+
     const { signal, forceRefresh = false, ttl = CACHE_TTL } = options;
 
-    if (method === 'GET' && !forceRefresh) {
-        const cacheKey = `${endpoint}_${url.search}`;
-        const cached = getCached(cacheKey);
-        if (cached) return cached;
+    // ---------- GET: параметры в query, кэширование ----------
+    if (method === 'GET') {
+        const url = new URL(`${API_BASE}${path}`, window.location.origin);
+        Object.entries(params).forEach(([key, value]) => {
+            if (value !== undefined && value !== null) {
+                url.searchParams.append(key, String(value));
+            }
+        });
+
+        if (!forceRefresh) {
+            const cacheKey = `${endpoint}_${url.search}`;
+            const cached = getCached(cacheKey);
+            if (cached) return cached;
+            const response = await apiFetch(url.toString(), { signal });
+            const text = await response.text();
+            setCache(cacheKey, text, ttl);
+            return text;
+        }
+
         const response = await apiFetch(url.toString(), { signal });
-        const text = await response.text();
-        setCache(cacheKey, text, ttl);
-        return text;
+        return await response.text();
     }
 
-    const response = await apiFetch(url.toString(), { signal, method });
+    // ---------- POST: параметры в FormData, без кэша ----------
+    const url = `${API_BASE}${path}`;
+    const formData = new FormData();
+    Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+            formData.append(key, String(value));
+        }
+    });
+
+    const response = await apiFetch(url, { signal, method, body: formData });
     return await response.text();
 }
 
@@ -219,6 +242,11 @@ async function findHost(hostname, signal, force) {
     return JSON.parse(text);
 }
 
+async function findHostBySerial(serial, signal) {
+    const text = await request('findHostBySerial', { serial }, { signal, forceRefresh: true });
+    return JSON.parse(text);
+}
+
 async function checkClientActive(hostname, signal, force) {
     const text = await request('clientActive', { hostname }, { signal, forceRefresh: force });
     return JSON.parse(text);
@@ -226,6 +254,34 @@ async function checkClientActive(hostname, signal, force) {
 
 async function cleanMsiMspApi(targetHost, signal) {
     const text = await request('cleanMsi', { targetHost }, { signal });
+    return JSON.parse(text);
+}
+
+// ---------- Принтеры ----------
+const PRINTER_CACHE_TTL = 30000;
+
+async function fetchPrinterDrivers(targetHost, signal, force) {
+    const text = await request('printerDrivers', { targetHost }, { signal, forceRefresh: force || true, ttl: PRINTER_CACHE_TTL });
+    return JSON.parse(text);
+}
+
+async function fetchPrinters(targetHost, signal, force) {
+    const text = await request('printers', { targetHost }, { signal, forceRefresh: force || true, ttl: PRINTER_CACHE_TTL });
+    return JSON.parse(text);
+}
+
+async function connectPrinterApi(targetHost, ipPrint, driverFullName, printName, signal) {
+    const text = await request('connectPrinter', { targetHost, ipPrint, driverFullName, printName }, { signal });
+    return JSON.parse(text);
+}
+
+async function checkPrinterIp(ip, signal) {
+    const text = await request('checkPrinterIp', { ip }, { signal, forceRefresh: true });
+    return JSON.parse(text);
+}
+
+async function checkHostOnline(ip, signal) {
+    const text = await request('checkHostOnline', { ip }, { signal, forceRefresh: true });
     return JSON.parse(text);
 }
 
@@ -251,8 +307,11 @@ window.fetchRoute = fetchRoute;
 window.fetchTraceroute = fetchTraceroute;
 window.fetchIpConfig = fetchIpConfig;
 window.findHost = findHost;
+window.findHostBySerial = findHostBySerial;
 window.checkClientActive = checkClientActive;
 window.fetchPrinterDrivers = fetchPrinterDrivers;
 window.fetchPrinters = fetchPrinters;
 window.connectPrinterApi = connectPrinterApi;
+window.checkPrinterIp = checkPrinterIp;         
+window.checkHostOnline = checkHostOnline;
 window.cleanMsiMspApi = cleanMsiMspApi;

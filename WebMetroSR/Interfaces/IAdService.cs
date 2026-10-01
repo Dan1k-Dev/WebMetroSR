@@ -13,5 +13,6 @@ namespace WebMetroSR.Interfaces
 
         Task<bool> IsHostOnlineAsync(string ip, int port = 445, int timeoutMs = 3000, CancellationToken token = default);
         Task<Dictionary<string, string>> GetMultipleSccmIpsAsync(List<string> hostnames);
+        Task<string?> GetHostnameBySerialAsync(string serialNumber);
     }
 }

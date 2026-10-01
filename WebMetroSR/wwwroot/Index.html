@@ -31,7 +31,7 @@
     <aside class="sidebar">
         <div class="search-box" id="search-container">
             <label for="search" class="sr-only"></label>
-            <input type="text" class="search-input" placeholder="Hostname or IP" id="search" autocomplete="off">
+            <input type="text" class="search-input" placeholder="Hostname / IP / Serial" id="search" autocomplete="off">
             <div class="search-loader"></div>
         </div>
         <div id="tree" class="tree-view"></div>
@@ -48,14 +48,11 @@
                 </div>
                 <div class="info-row"><span class="label">LastBoot:</span> <span id="last-boot" class="val-mono">—</span></div>
             </div>
-            <div class="actions">
-                <button class="btn-act rdp-btn" id="rdpBtn" disabled>RDP</button>
-            </div>
         </header>
 
         <nav class="nav-tabs">
-            <div class="tab active" data-tab="info">Основная информация</div>
-            <div class="tab disabled" data-tab="logs">Дополнительная информация</div>
+            <div class="tab active" data-tab="info">Основные сведения</div>
+            <div class="tab disabled" data-tab="logs">Дополнительные сведения</div>
             <div class="tab disabled" data-tab="funcs">Функции</div>
         </nav>
 

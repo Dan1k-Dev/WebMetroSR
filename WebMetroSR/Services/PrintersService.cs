@@ -219,5 +219,51 @@ namespace WebMetroSR.Services
                 return (false, $"Внутренняя ошибка: {ex.Message}");
             }
         }
+
+        public async Task<bool> IsPrinterByIpAsync(string ip)
+        {
+            if (string.IsNullOrWhiteSpace(ip))
+                return false;
+
+            string escapedIp = ip.Trim().Replace("'", "''");
+            string psScript = $@"
+                                $IPAddress = '{escapedIp}'
+                                $isPrinter = $false
+                                foreach ($port in @(9100, 515, 631)) {{
+                                    $tcp = New-Object System.Net.Sockets.TcpClient
+                                    try {{
+                                        $connect = $tcp.BeginConnect($IPAddress, $port, $null, $null)
+                                        if ($connect.AsyncWaitHandle.WaitOne(1500, $false) -and $tcp.Connected) {{
+                                            $isPrinter = $true
+                                            break
+                                        }}
+                                    }} catch {{ }}
+                                    finally {{ $tcp.Close() }}
+                                }}
+                                if (-not $isPrinter) {{
+                                    try {{
+                                        $snmp = New-Object -ComObject olePrn.OleSNMP
+                                        $snmp.Open($IPAddress, 'public', 2, 1000)
+                                        $sysDescr = $snmp.Get('.1.3.6.1.2.1.1.1.0')
+                                        $snmp.Close()
+                                        if ($sysDescr -match 'Printer|MFP|LaserJet|Laser|Inkjet|Canon|HP|Xerox|Kyocera|Brother|Ricoh|Epson') {{
+                                            $isPrinter = $true
+                                        }}
+                                    }} catch {{ }}
+                                }}
+                                Write-Output $isPrinter";
+            psScript = _powerShellService.InjectUserVariable(psScript);
+
+            try
+            {
+                var (output, _, _) = await _powerShellService.RunScriptAsyncWithStatus(psScript, timeoutSeconds: 15);
+                return output.Trim().Equals("True", StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "IsPrinterByIpAsync failed for {Ip}", ip);
+                return false;
+            }
+        }
     }
 }
