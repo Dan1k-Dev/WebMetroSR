@@ -301,56 +301,5 @@ namespace WebMetroSR.Services
 
             return result.ToString().Trim();
         }
-
-        [SupportedOSPlatform("windows")]
-        public async Task<List<ContainerHostInfo>> GetMultipleHostsInfoAsync(List<string> hostnames, IProgress<string>? progress = null, CancellationToken cancellationToken = default)
-        {
-            var results = new ConcurrentBag<ContainerHostInfo>();
-            var semaphore = new SemaphoreSlim(5, 10);
-
-            var tasks = hostnames.Select(async hostname =>
-            {
-                await semaphore.WaitAsync(cancellationToken);
-                try
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var info = new ContainerHostInfo { Hostname = hostname };
-
-                    string password = await GetPasswordAsync(hostname);
-                    if (string.IsNullOrEmpty(password) || password.Contains("Ошибка"))
-                    {
-                        info.Error = "Не удалось получить пароль LAPS";
-                        results.Add(info);
-                        return;
-                    }
-
-                    var modelTask = GetWmiPropertyAsync(hostname, "Win32_Baseboard", "Manufacturer");
-                    var serialTask = GetWmiPropertyAsync(hostname, "Win32_Bios", "SerialNumber");
-                    var macTask = GetMacAddressAsync(hostname);
-                    var osTask = GetOs(hostname);
-                    var ramTask = GetRamAsync(hostname);
-                    var diskTask = GetDiskInfoAsync(hostname);
-
-                    await Task.WhenAll(modelTask, serialTask, macTask, osTask, ramTask, diskTask);
-
-                    info.HddTotal = diskTask.Result.total;
-                    info.HddFree = diskTask.Result.free;
-                    info.Ram = await ramTask;
-                    info.OsInfo = await osTask;
-                    results.Add(info);
-                }
-                catch (OperationCanceledException)
-                {
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error getting info for {Hostname}", hostname);
-                    results.Add(new ContainerHostInfo { Hostname = hostname, HddTotal = "Ошибка", HddFree = "Ошибка", Ram = "Ошибка", OsInfo = ex.Message });
-                }
-                finally { semaphore.Release(); }
-            });
-            await Task.WhenAll(tasks);
-            return [.. results];
-        }
     }
 }

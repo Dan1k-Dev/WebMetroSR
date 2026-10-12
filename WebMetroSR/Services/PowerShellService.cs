@@ -59,12 +59,14 @@ namespace WebMetroSR.Services
         public async Task<string> RunScriptAsync(string script, int timeoutSeconds = 60, CancellationToken cancellationToken = default)
         {
             var (output, error, exitCode) = await RunScriptAsyncWithStatus(script, timeoutSeconds, cancellationToken);
-            if (exitCode != 0 && !string.IsNullOrEmpty(error))
-                throw new Exception($"PowerShell error: {error}");
+            if (exitCode != 0)
+            {
+                var msg = string.IsNullOrWhiteSpace(error) ? output : error;
+                throw new Exception($"PowerShell exited with code {exitCode}. Output: {msg}");
+            }
             return output;
         }
 
-       
         public async Task<string> ExecuteLapsCommandAsync(string hostname, bool forceRefresh = false)
         {
             string cacheKey = CacheKeys.LapsKey(hostname);

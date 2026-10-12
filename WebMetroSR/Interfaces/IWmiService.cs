@@ -14,7 +14,5 @@ namespace WebMetroSR.Interfaces
         Task<string> GetOs(string hostname);
         Task<string> GetBuildRevisionAsync(string hostname);
         Task<string> GetReleaseVersionAsync(string hostname);
-
-        Task<List<ContainerHostInfo>> GetMultipleHostsInfoAsync(List<string> hostnames, IProgress<string>? progress = null, CancellationToken cancellationToken = default);
     }
 }

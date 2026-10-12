@@ -268,7 +268,6 @@
                     errorDiv.style.display = 'block';
                 }
             } catch (err) {
-                console.error('Login error:', err);
                 errorDiv.textContent = 'Ошибка сети: ' + err.message;
                 errorDiv.style.display = 'block';
             } finally {

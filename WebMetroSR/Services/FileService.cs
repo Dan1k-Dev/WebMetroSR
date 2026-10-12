@@ -18,7 +18,6 @@ namespace WebMetroSR.Services
             return await _powerShellService.ExecuteLapsCommandAsync(hostname);
         }
 
-        [SuppressMessage("Design", "SYSLIB1045", Justification = "Safe Regex")]
         public async Task<(bool success, string output)> CleanMsiMspAsync(string targetHost)
         {
             string password = await GetPasswordAsync(targetHost);
@@ -36,34 +35,57 @@ namespace WebMetroSR.Services
             string escapedPassword = password.Replace("'", "''");
 
             string psCommand = $@"
-                                [Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
-                                $targetPath = '{targetPath}'
-                                $username = '{targetHost}\RuAdmin'
-                                $password = '{escapedPassword}'
+                        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
+                        $targetPath = '{targetPath}'
+                        $username = '{targetHost}\RuAdmin'
+                        $password = '{escapedPassword}'
 
-                                # Отключаем возможные старые подключения, чтобы net use не подвис
-                                cmd /c ""net use $targetPath /delete /y"" 2>$null | Out-Null
+                        # Отключаем возможные старые подключения, чтобы net use не подвис
+                        cmd /c ""net use $targetPath /delete /y"" 2>$null | Out-Null
 
-                                # Ограничиваем время ожидания SMB, чтобы не висеть минутами
-                                $netResult = cmd /c ""net use $targetPath /user:$username $password"" 2>&1
-                                if ($LASTEXITCODE -ne 0) {{
-                                    Write-Output ('Ошибка авторизации на удалённой машине: ' + ($netResult -join ' '))
-                                    exit 1
-                                }}
+                        # Ограничиваем время ожидания SMB, чтобы не висеть минутами
+                        $netResult = cmd /c ""net use $targetPath /user:$username $password"" 2>&1
+                        if ($LASTEXITCODE -ne 0) {{
+                            Write-Output ('Ошибка авторизации на удалённой машине: ' + ($netResult -join ' '))
+                            exit 1
+                        }}
 
-                                & '{scriptFilePath}' -targetPath $targetPath | Where-Object {{ $_ -notmatch '^#< CLIXML' -and $_ -notmatch '^System.Management.Automation' -and $_ -notmatch '^\\\\.*was deleted successfully' }}
+                        & '{scriptFilePath}' -targetPath $targetPath | Where-Object {{ $_ -notmatch '^#< CLIXML' -and $_ -notmatch '^System.Management.Automation' -and $_ -notmatch '^\\\\.*was deleted successfully' }}
 
-                                cmd /c ""net use $targetPath /delete /y"" 2>$null | Out-Null";
+                        cmd /c ""net use $targetPath /delete /y"" 2>$null | Out-Null";
 
             psCommand = _powerShellService.InjectUserVariable(psCommand);
-            string output = await _powerShellService.RunScriptAsync(psCommand, timeoutSeconds: 300);
-            bool success = !output.Contains("Ошибка") && !output.Contains("Error");
 
-            string cleanOutput = output.Trim();
+            var (output, error, exitCode) = await _powerShellService.RunScriptAsyncWithStatus(psCommand, timeoutSeconds: 300);
+
+            string stdout = (output ?? "").Trim();
+            string stderr = (error ?? "")
+                .TrimStart('\uFEFF', '\u200B', '\r', '\n', ' ', '\t')
+                .Trim();
+
+            _logger.LogInformation(
+                "CleanMsiMsp raw for {TargetHost}: exit={ExitCode}, stdoutLen={S}, stderrLen={E}",
+                targetHost, exitCode, stdout.Length, stderr.Length);
+            if (!string.IsNullOrEmpty(stderr))
+                _logger.LogInformation("CleanMsiMsp stderr: [{Stderr}]", stderr);
+
+            string combined = string.IsNullOrEmpty(stderr)
+                ? stdout
+                : (string.IsNullOrEmpty(stdout) ? stderr : stdout + "\n" + stderr);
+
+            bool success = exitCode == 0
+                           && !combined.Contains("Ошибка авторизации")
+                           && !combined.Contains("PowerShell error");
+
+            // ---------- Уборка служебного мусора ----------
+            string cleanOutput = combined;
             cleanOutput = Regex.Replace(cleanOutput, @"\\\\[^\s]+\\c\$\\Windows\\Installer was deleted successfully\.", "");
             cleanOutput = Regex.Replace(cleanOutput, @"#< CLIXML[\s\S]*$", "");
             cleanOutput = Regex.Replace(cleanOutput, @"System\.Management\.Automation\.PSCustomObject.*$", "");
             cleanOutput = cleanOutput.Trim();
+
+            if (success && string.IsNullOrEmpty(cleanOutput))
+                return (false, "Скрипт отработал без вывода. Возможно, папка Installer не найдена или нет прав.");
 
             return (success, cleanOutput);
         }

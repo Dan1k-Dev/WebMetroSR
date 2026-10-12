@@ -116,7 +116,7 @@ namespace WebMetroSR.Controllers
                 ip = await _ad.GetSccmIpAsync(hostname);
 
             var result = new { success = true, ip = ip ?? "0.0.0.0" };
-            _cache.Set(cacheKey, result, TimeSpan.FromMinutes(5));
+            _cache.Set(cacheKey, result, TimeSpan.FromMinutes(1));
             return Ok(result);
         }
 
@@ -483,16 +483,22 @@ namespace WebMetroSR.Controllers
             }
         }
 
+        public class CleanMsiRequest
+        {
+            public string? TargetHost { get; set; }
+        }
+
         [HttpPost("clean-msi-msp")]
-        public async Task<IActionResult> CleanMsiMsp([FromQuery] string targetHost)
+        public async Task<IActionResult> CleanMsiMsp([FromBody] CleanMsiRequest request)
         {
             var auth = EnsureAuthenticated(_userCreds);
             if (auth != null) return auth;
 
-            var validation = EnsureRequired((targetHost, nameof(targetHost)));
+            var targetHost = request?.TargetHost;
+            var validation = EnsureRequired((targetHost ?? "", nameof(targetHost)));
             if (validation != null) return validation;
 
-            var (success, output) = await _file.CleanMsiMspAsync(targetHost);
+            var (success, output) = await _file.CleanMsiMspAsync(targetHost!);
 
             var clientIP = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
             string user;
@@ -500,7 +506,6 @@ namespace WebMetroSR.Controllers
             var requestName = "CleanMsiMsp";
             var resultMessage = success ? "Success" : $"Error: {output}";
 
-            // Детали в all.log
             _logger.LogInformation("CleanMsiMsp result for {TargetHost}: {Output}", targetHost, output);
 
             using (LogContext.PushProperty("Category", "Change"))
@@ -606,73 +611,6 @@ namespace WebMetroSR.Controllers
 
             bool isActive = await _sccm.IsClientActiveAsync(hostname);
             return Ok(new { success = true, isActive });
-        }
-
-        [HttpGet("host-info")]
-        public async Task<ContainerHostInfo> GetHostInfo([FromQuery] string hostname)
-        {
-            // Этот метод может использоваться в container-info.html, также защитим
-            var auth = EnsureAuthenticated(_userCreds);
-            if (auth != null) return new ContainerHostInfo { Error = "Не авторизован" };
-
-            if (string.IsNullOrEmpty(hostname))
-                return new ContainerHostInfo { Error = "Hostname не указан" };
-
-            string cacheKey = CacheKeys.HostInfoKey(hostname);
-            if (_cache.TryGet<ContainerHostInfo>(cacheKey, out var cached) && cached is not null)
-                return cached;
-
-            var info = new ContainerHostInfo { Hostname = hostname };
-            try
-            {
-                var ips = await _ad.GetMultipleSccmIpsAsync([hostname]);
-                info.Ip = ips.GetValueOrDefault(hostname, "Не найден");
-                info.IsActive = await _sccm.IsClientActiveAsync(hostname);
-
-                if (info.IsActive && CommonHelpers.IsValidIp(info.Ip))
-                {
-                    info.IsOnline = await _ad.IsHostOnlineAsync(info.Ip, 445, 3000);
-                    if (info.IsOnline)
-                    {
-                        var laps = await _ps.ExecuteLapsCommandAsync(hostname);
-                        if (!string.IsNullOrEmpty(laps) && !laps.Contains("Ошибка"))
-                        {
-                            var diskTask = _wmi.GetDiskInfoAsync(hostname, info.Ip);
-                            var ramTask = _wmi.GetRamAsync(hostname, info.Ip);
-                            var osTask = _wmi.GetOs(hostname);
-                            await Task.WhenAll(diskTask, ramTask, osTask);
-                            info.HddTotal = diskTask.Result.total;
-                            info.HddFree = diskTask.Result.free;
-                            info.Ram = ramTask.Result;
-                            info.OsInfo = osTask.Result;
-                        }
-                    }
-                    else info.Error = "Оффлайн (не отвечает на порт 445)";
-                }
-                else if (!info.IsActive) info.Error = "Не активен в SCCM";
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "GetHostInfo failed for {Hostname}", hostname);
-                info.Error = ex.Message.Contains("timed out") ? "Оффлайн" : ex.Message;
-            }
-            _cache.Set(cacheKey, info, TimeSpan.FromMinutes(5));
-            return info;
-        }
-
-        [HttpGet("container-hosts-info")]
-        public async Task<IActionResult> GetContainerHostsInfo([FromQuery] string dn, CancellationToken cancellationToken)
-        {
-            var auth = EnsureAuthenticated(_userCreds);
-            if (auth != null) return auth;
-
-            var validation = EnsureRequired((dn, nameof(dn)));
-            if (validation != null) return validation;
-
-            var hosts = await _ad.GetHostsAsync(dn);
-            var hostnames = new List<string>(hosts.Select(h => h.Name).OfType<string>());
-            var infos = await _wmi.GetMultipleHostsInfoAsync(hostnames, cancellationToken: cancellationToken);
-            return Ok(infos);
         }
 
         [HttpGet("find-host-by-serial")]

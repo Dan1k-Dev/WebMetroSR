@@ -44,7 +44,6 @@ async function fetchUserGroups() {
         }
         if (elements.countSpan) elements.countSpan.textContent = `Всего групп: ${groups.length}`;
     } catch (err) {
-        console.error(err);
         if (elements.listUl) {
             elements.listUl.innerHTML = `<li style="color: var(--danger);">Ошибка: ${escapeHtml(err.message)}</li>`;
         }
@@ -105,7 +104,6 @@ async function loadInstalledSoftware(forceRefresh = false) {
         if (elements.countSpan) elements.countSpan.textContent = `Всего программ: ${softwareData.length}`;
     } catch (err) {
         if (err.name === 'AbortError') return;
-        console.error(err);
         if (elements.tableBody) {
             elements.tableBody.innerHTML = `<tr><td colspan="2" style="color: var(--danger);">Ошибка: ${escapeHtml(err.message)}</td></tr>`;
         }
@@ -200,7 +198,6 @@ async function loadDevices(forceRefresh = false) {
         }
     } catch (err) {
         if (err.name === 'AbortError') return;
-        console.error(err);
         if (elements.tableBody) {
             elements.tableBody.innerHTML = `<tr><td colspan="3" style="color: var(--danger);">Ошибка: ${escapeHtml(err.message)}</td></tr>`;
         }

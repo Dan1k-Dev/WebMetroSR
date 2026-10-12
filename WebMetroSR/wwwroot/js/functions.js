@@ -91,6 +91,7 @@ window.openInsightCard = openInsightCard;
 
 // ---------- Очистка MSI/MSP ----------
 async function cleanMsiMsp() {
+
     const state = store.getState();
     const hostname = state.currentHostname;
 
@@ -99,8 +100,8 @@ async function cleanMsiMsp() {
         return;
     }
 
-    if (!confirm('Пожалуйста, подтвердите действие очистки MSI/MSP. Продолжить?')) {
-        console.log('Очистка MSI/MSP отменена пользователем');
+    const confirmed = confirm('Пожалуйста, подтвердите действие очистки MSI/MSP. Продолжить?');
+    if (!confirmed) {
         return;
     }
 
@@ -114,21 +115,27 @@ async function cleanMsiMsp() {
 
     try {
         const result = await cleanMsiMspApi(hostname);
+
         if (result.success) {
             let decodedOutput = result.output || 'Очистка завершена успешно!';
             decodedOutput = decodeUnicodeEscapes(decodedOutput);
             appendToMsiLog(`✅ ${decodedOutput}`);
-            store.cacheClear(`disk_${hostname}`);
-            await updateDiskInfo();
         } else {
             let decodedOutput = result.output || 'Неизвестная ошибка';
             decodedOutput = decodeUnicodeEscapes(decodedOutput);
-            appendToMsiLog(`❌ Ошибка: ${decodedOutput}`);
+            appendToMsiLog(`⚠️ Очистка завершена с замечаниями: ${decodedOutput}`);
         }
     } catch (err) {
-        console.error('Error cleaning MSI/MSP:', err);
         appendToMsiLog(`❌ Ошибка подключения: ${err.message}`);
     } finally {
+        // Обновляем данные о диске в любом случае — файлы могли удалиться
+        store.cacheClear('disk_');
+        await new Promise(r => setTimeout(r, 800));
+        try {
+            await updateDiskInfo(true);
+        } catch (e) {
+        }
+
         if (msiCleanBtn) {
             msiCleanBtn.disabled = false;
             msiCleanBtn.textContent = 'Очистить MSI';
@@ -213,13 +220,13 @@ function appendToMsiLog(message) {
 }
 
 // ---------- Обновление информации о диске ----------
-async function updateDiskInfo() {
+async function updateDiskInfo(forceRefresh = false) {
     const state = store.getState();
     const hostname = state.currentHostname;
     const ip = state.currentIp;
     if (!hostname || hostname === '—' || hostname === 'Запрос...') return;
     try {
-        const diskData = await fetchDisk(hostname, ip);
+        const diskData = await fetchDisk(hostname, ip, null, forceRefresh);
         if (diskData) {
             const hddTotalSpan = document.getElementById('hdd-total');
             const hddFreeSpan = document.getElementById('hdd-free');
@@ -227,7 +234,7 @@ async function updateDiskInfo() {
             if (hddFreeSpan) hddFreeSpan.textContent = diskData.hddFree || "—";
         }
     } catch (err) {
-        console.error('Error updating disk info:', err);
+        console.error('Error updating disk info');
     }
 }
 
@@ -265,7 +272,7 @@ async function loadPrinterDrivers(forceRefresh = true) {
             driverSelect.innerHTML = '<option value="">Нет доступных драйверов</option>';
         }
     } catch (err) {
-        console.error('Error loading printer drivers:', err);
+        console.error('Error loading printer drivers');
         driverSelect.innerHTML = `<option value="">Ошибка: ${err.message}</option>`;
         driverSelect.disabled = true;
     }
@@ -349,7 +356,7 @@ async function showPrintersList(forceRefresh = true) {
             if (printersCountSpan) printersCountSpan.textContent = `Всего принтеров: ${onlyPrinters.length}`;
         }
     } catch (err) {
-        console.error('Error loading printers:', err);
+        console.error('Error loading printers');
         if (printersTableBody) {
             printersTableBody.innerHTML = `<tr><td colspan="3" style="color: var(--danger); text-align:center;">Ошибка: ${escapeHtml(err.message)}</td></tr>`;
         }
@@ -391,7 +398,7 @@ async function connectPrinter() {
             return;
         }
     } catch (err) {
-        console.error('IP check error:', err);
+        console.error('IP check error');
         alert('Не удалось проверить IP: ' + err.message);
         if (connectBtn) {
             connectBtn.disabled = false;
@@ -424,7 +431,7 @@ async function connectPrinter() {
             appendToPrinterLog(`❌ Ошибка подключения: ${result.error || result.output || 'Неизвестная ошибка'}`);
         }
     } catch (err) {
-        console.error('Error connecting printer:', err);
+        console.error('Error connecting printer');
         appendToPrinterLog(`❌ Ошибка: ${err.message}`);
     } finally {
         if (connectBtn) {

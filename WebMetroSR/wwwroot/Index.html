@@ -13,16 +13,12 @@
             try {
                 const res = await fetch('/api/auth/check');
                 const data = await res.json();
-                console.log('Auth check:', data);
                 if (!data.authenticated) {
-                    console.log('Not authenticated, redirect to login');
                     window.location.href = '/login.html';
                 } else {
-                    console.log('Authenticated as', data.username);
                     window.currentUser = data.username;
                 }
-            } catch (err) {
-                console.error('Auth check error:', err);
+            } catch {
                 window.location.href = '/login.html';
             }
         })();
@@ -31,7 +27,7 @@
     <aside class="sidebar">
         <div class="search-box" id="search-container">
             <label for="search" class="sr-only"></label>
-            <input type="text" class="search-input" placeholder="Hostname / IP / Serial" id="search" autocomplete="off">
+            <input type="text" class="search-input" placeholder="Hostname / IP / Serial" id="search" autocomplete="off", maxlength="16">
             <div class="search-loader"></div>
         </div>
         <div id="tree" class="tree-view"></div>
@@ -152,7 +148,6 @@
     <script src="js/utils.js"></script>
     <script src="js/api.js"></script>
     <script src="js/store.js"></script>
-    <script src="js/theme.js"></script>
     <script src="js/modals.js"></script>
     <script src="js/logs.js"></script>
     <script src="js/functions.js"></script>

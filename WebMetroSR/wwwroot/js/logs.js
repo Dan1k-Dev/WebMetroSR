@@ -44,7 +44,6 @@ async function loadLog(endpoint, fileName, hostname, ip) {
         if (logContentDiv) logContentDiv.innerHTML = `<pre>${escapeHtml(text)}</pre>`;
     } catch (err) {
         if (err.name === 'AbortError') return;
-        console.error(err);
         if (logContentDiv) logContentDiv.innerHTML = `<div class="log-error">❌ Ошибка: ${escapeHtml(err.message)}</div>`;
     }
 }
@@ -133,7 +132,6 @@ async function runNetCommand(title, loader) {
         }
     } catch (err) {
         if (err.name === 'AbortError') return;
-        console.error(err);
         content.innerHTML = `<div class="log-error">❌ Ошибка: ${escapeHtml(err.message)}</div>`;
     }
 }

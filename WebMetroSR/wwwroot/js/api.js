@@ -32,11 +32,14 @@ function setCache(key, data, ttl = CACHE_TTL) {
 }
 
 async function apiFetch(url, options = {}) {
-    const headers = options.headers || {};
-    if (currentBatch.id) {
+    const headers = { ...(options.headers || {}) };
+    const method = (options.method || 'GET').toUpperCase();
+
+    if (method === 'GET' && currentBatch.id) {
         headers['X-Correlation-Id'] = currentBatch.id;
         headers['X-Hostname'] = currentBatch.hostname;
     }
+
     const response = await fetch(url, {
         ...options,
         headers
@@ -91,9 +94,11 @@ const endpoints = {
     checkHostOnline: { path: '/check-host-online', method: 'GET' },
 };
 
-async function request(endpoint, params = {}, options = {}) {
-    const { path, method } = endpoints[endpoint];
+const JSON_POST_ENDPOINTS = new Set(['cleanMsi']);
 
+async function request(endpoint, params = {}, options = {}) {
+
+    const { path, method } = endpoints[endpoint];
     const { signal, forceRefresh = false, ttl = CACHE_TTL } = options;
 
     // ---------- GET: параметры в query, кэширование ----------
@@ -119,8 +124,21 @@ async function request(endpoint, params = {}, options = {}) {
         return await response.text();
     }
 
-    // ---------- POST: параметры в FormData, без кэша ----------
+    // ---------- POST ----------
     const url = `${API_BASE}${path}`;
+
+    // JSON-ветка
+    if (JSON_POST_ENDPOINTS.has(endpoint)) {
+        const response = await apiFetch(url, {
+            signal,
+            method,
+            body: JSON.stringify(params),
+            headers: { 'Content-Type': 'application/json' }
+        });
+        return await response.text();
+    }
+
+    // FormData-ветка 
     const formData = new FormData();
     Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
@@ -188,8 +206,8 @@ async function fetchLastBoot(hostname, ip, signal) {
     return JSON.parse(text);
 }
 
-async function fetchDisk(hostname, ip, signal) {
-    const text = await request('disk', { hostname, ip }, { signal });
+async function fetchDisk(hostname, ip, signal, forceRefresh = false) {
+    const text = await request('disk', { hostname, ip }, { signal, forceRefresh });
     return JSON.parse(text);
 }
 
@@ -210,11 +228,13 @@ async function fetchUserGroupsApi(userName, signal, force) {
 
 // Для установленного ПО и устройств возвращаем сырой текст (клиент сам распарсит)
 async function fetchInstalledSoftware(hostname, ip, signal, force) {
-    return request('installedApps', { hostname, ip }, { signal, forceRefresh: force, ttl: 600000 });
+    return request('installedApps', { hostname, ip },
+        { signal, forceRefresh: force, ttl: BUTTON_CACHE_TTL });
 }
 
 async function fetchDevices(targetHost, signal, force) {
-    return request('remoteDevices', { targetHost }, { signal, forceRefresh: force });
+    return request('remoteDevices', { targetHost },
+        { signal, forceRefresh: force, ttl: BUTTON_CACHE_TTL });
 }
 
 // Логи возвращают текст

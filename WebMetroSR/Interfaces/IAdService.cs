@@ -12,7 +12,6 @@ namespace WebMetroSR.Interfaces
         Task<string> GetLapsPasswordAsync(string hostname, bool forceRefresh = false);
 
         Task<bool> IsHostOnlineAsync(string ip, int port = 445, int timeoutMs = 3000, CancellationToken token = default);
-        Task<Dictionary<string, string>> GetMultipleSccmIpsAsync(List<string> hostnames);
         Task<string?> GetHostnameBySerialAsync(string serialNumber);
     }
 }

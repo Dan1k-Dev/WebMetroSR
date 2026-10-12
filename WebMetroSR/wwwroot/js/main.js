@@ -187,7 +187,6 @@ function startWmiRequests(name, ip, signal, skip = {}) {
                 }
             })
             .catch(error => {
-                console.warn(`Request ${key} failed:`, error);
                 switch (key) {
                     case 'user':
                         dom.user.textContent = "Unknown";
@@ -244,12 +243,9 @@ function startWmiRequests(name, ip, signal, skip = {}) {
 // ---- Основная функция обновления информации о хосте ----
 async function updateHostInfo(name, el, forceRefresh = false, prefill = null) {
     if (isLoading) {
-        console.log('updateHostInfo already in progress, skipping');
         return;
     }
     isLoading = true;
-
-    console.log('updateHostInfo called for:', name, forceRefresh ? '(force refresh)' : '', prefill || '');
 
     if (el && highlightTimeouts.has(el)) {
         clearTimeout(highlightTimeouts.get(el));
@@ -287,7 +283,6 @@ async function updateHostInfo(name, el, forceRefresh = false, prefill = null) {
             return;
         }
     } catch (err) {
-        console.error('Error checking client active:', err);
     } finally {
         if (notification) notification.remove();
     }
@@ -339,7 +334,7 @@ async function updateHostInfo(name, el, forceRefresh = false, prefill = null) {
             }
         } catch (err) {
             // Если проверка упала — считаем оффлайн
-            console.error('Online check failed:', err);
+            console.error('Online check failed');
             handleHostOffline(name, el);
             endBatchSafe();
             isLoading = false;
@@ -498,12 +493,27 @@ function isValidIPv4(ip) {
 
 // ---- Вспомогательные функции для поиска ----
 function validateSearchInput(val) {
+    if (!val) return false;
+
+    // Длина: от 6 до 16
+    if (val.length < 6 || val.length > 16) {
+        alert('Невомзожное значение Lenght для введенных данных');
+        return false;
+    }
+
+    if (!/^[A-Za-z0-9.]+$/.test(val)) {
+        alert('Hostname, IP или S/N содержат недопустимые символы');
+        return false;
+    }
+
+    // Проверка формата IPv4, если ввод похож на IP
     if (val.includes('.') && !val.includes('-')
         && !Number.isNaN(Number(val.split('.')[0]))
         && !isValidIPv4(val)) {
         alert('Некорректный формат IPv4 адреса');
         return false;
     }
+
     return true;
 }
 
@@ -517,7 +527,7 @@ function findHostInContainer(container, hostName) {
 
 async function navigateToHostInTree(hostName, containerDn, prefill = null) {
     if (typeof containerDn !== 'string') {
-        console.error('Invalid containerDn type:', containerDn);
+        console.error('Invalid containerDn type');
         return false;
     }
     document.querySelectorAll('details').forEach(d => d.open = false);
@@ -583,7 +593,7 @@ async function performSearch(val, searchInput, searchContainer) {
                     return;
                 }
             } catch (serialErr) {
-                console.error('Serial search error:', serialErr);
+                console.error('Serial search error');
             }
         }
 
@@ -594,7 +604,7 @@ async function performSearch(val, searchInput, searchContainer) {
             alert(`Хост "${val}" не найден в AD, устройство с таким серийным номером также не найдено в SCCM.`);
         }
     } catch (err) {
-        console.error('Search error:', err);
+        console.error('Search error');
         alert('Ошибка поиска: ' + err.message);
     } finally {
         searchInput.disabled = false;
@@ -617,7 +627,7 @@ async function searchHandler(e) {
 function init() {
     console.log('init started');
     updateButtonsAndTabsState();
-    buildTree();
+    void buildTree();
 
     const groupsBtnElem = document.getElementById('groupsBtn');
     const closeGroupsBtn = document.getElementById('closeGroupsModalBtn');

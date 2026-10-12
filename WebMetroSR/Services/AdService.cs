@@ -157,23 +157,6 @@ namespace WebMetroSR.Services
             return result;
         }
 
-        public async Task<Dictionary<string, string>> GetMultipleSccmIpsAsync(List<string> hostnames)
-        {
-            var results = new Dictionary<string, string>();
-            var tasks = hostnames.Select(async hostname =>
-            {
-                await _sccmSemaphore.WaitAsync();
-                try
-                {
-                    string ip = await GetSccmIpAsync(hostname);
-                    lock (results) { results[hostname] = ip; }
-                }
-                finally { _sccmSemaphore.Release(); }
-            });
-            await Task.WhenAll(tasks);
-            return results;
-        }
-
         public async Task<string> GetCurrentUserAsync(string hostname, string ip)
         {
             string password = await GetLapsPasswordAsync(hostname);
